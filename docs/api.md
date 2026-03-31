@@ -1,84 +1,118 @@
 # API Summary
 
-## Core Services
+## Laptop Service
 
-- `GET /health/` on each service returns service status.
-- `GET /books/`, `POST /books/`, `PUT /books/<book_id>/`, `DELETE /books/<book_id>/`
-- `GET /customers/`, `POST /customers/`
-- `GET /carts/`, `POST /carts/`, `GET /carts/<customer_id>/`
-- `POST /cart-items/`, `PUT /cart-items/<item_id>/`, `DELETE /cart-items/<item_id>/`
+- `GET /health/`
+- `GET /products/`
+- `POST /products/`
+- `GET /products/<id>/`
+- `PUT /products/<id>/`
+- `PATCH /products/<id>/`
+- `DELETE /products/<id>/`
 
-## Added Services
+## Mobile Service
 
-- `GET /staff/`, `POST /staff/`
-- `GET /managers/`, `POST /managers/`
-- `GET /catalog/books/`, `POST /catalog/sync/`
-- `GET /orders/`, `POST /orders/`
-- `GET /payments/`, `POST /payments/reserve/`, `POST /payments/<payment_id>/cancel/`
-- `GET /shipments/`, `POST /shipments/reserve/`, `POST /shipments/<shipment_id>/cancel/`
-- `GET /reviews/`, `POST /reviews/`
-- `GET /recommendations/<customer_id>/`
+- `GET /health/`
+- `GET /products/`
+- `POST /products/`
+- `GET /products/<id>/`
+- `PUT /products/<id>/`
+- `PATCH /products/<id>/`
+- `DELETE /products/<id>/`
 
-## Auth Service (JWT)
+## Staff Service
 
-- `POST /auth/register/`
-- `POST /auth/login/`
-- `POST /auth/refresh/`
-- `POST /auth/verify/`
-- `POST /auth/users/role/` (internal admin sync)
+- `GET /health/`
+- `GET /staff/`
+- `POST /staff/`
 
-Auth service operational notes:
-- Container startup runs `python manage.py seed_admin` to ensure default admin exists.
-- `POST /auth/users/role/` requires `X-Admin-Token` matching `AUTH_ADMIN_TOKEN`.
+## Customer Service
 
-## Gateway Ops
+- `GET /health/`
+- `GET /customers/`
+- `POST /customers/`
 
-- `GET /staff/ops/metrics/` (gateway metrics JSON)
-- `GET /staff/ops/traces/` (gateway traces JSON)
+## Cart Service
 
-## Internal Service Security
+- `GET /health/`
+- `POST /carts/` (create or get cart by `customer_id`)
+- `GET /carts/<customer_id>/`
+- `DELETE /carts/<customer_id>/items/` (clear cart)
+- `POST /cart-items/`
+- `PUT /cart-items/<item_id>/`
+- `DELETE /cart-items/<item_id>/`
 
-- Backend services now require `X-Service-Token` for non-health API calls.
-- Public liveness endpoint `/health/` remains open for probes.
-- Login/register endpoints have basic in-memory rate limiting.
+## Pay Service
 
-## API Gateway (UI + Auth + Role Access)
+- `GET /health/`
+- `POST /payments/reserve/`
+- `POST /payments/<payment_id>/cancel/`
 
-- `GET /auth/login/`, `POST /auth/login/`
-- `GET /auth/register/`, `POST /auth/register/`
-- `POST /auth/logout/`
-- `GET /shop/` (customer storefront, da nganh)
-- `GET /shop/<product_id>/` (chi tiet san pham)
-- `GET /customer/<customer_id>/favorites/` (danh sach yeu thich)
-- `POST /customer/favorites/<product_id>/toggle/` (them/bo yeu thich)
-- `GET /customer/cart/<customer_id>/` (checkout + orders + reviews)
-- `GET /admin/users/`, `POST /admin/users/` (admin role assignment)
-- `GET /staff/health/` (microservice health dashboard)
+## Ship Service
 
-## Product Categories
+- `GET /health/`
+- `POST /shipments/reserve/`
+- `POST /shipments/<shipment_id>/cancel/`
 
-- `sach`
-- `quan_ao`
-- `gia_dung`
-- `dien_tu`
+## Order Service
+
+- `GET /health/`
+- `GET /orders/?customer_id=<id>`
+- `POST /orders/`
+- `GET /customers/<customer_id>/purchased-products/`
+
+## Comment Rate Service
+
+- `GET /health/`
+- `GET /reviews/?customer_id=<id>&product_id=<id>`
+- `POST /reviews/`
 
 ## Example Payloads
+
+### Create Staff
+
+```json
+{
+  "name": "Le Van B",
+  "email": "b@example.com",
+  "department": "operations"
+}
+```
 
 ### Create Customer
 
 ```json
 {
-  "name": "Nguyen Xuan Dat",
-  "email": "dat.nx@ptit.edu.vn"
+  "name": "Nguyen Van A",
+  "email": "a@example.com"
 }
 ```
 
-### Add Cart Item
+### Create Laptop/Mobile Product
+
+```json
+{
+  "name": "Laptop Pro 14",
+  "description": "Laptop van phong",
+  "price": "18990000",
+  "stock": 10,
+  "brand": "ProTech",
+  "model_code": "LP14-2026",
+  "warranty_months": 24,
+  "specs": {
+    "ram": "16GB",
+    "storage": "512GB SSD"
+  },
+  "is_active": true
+}
+```
+
+### Add Item To Cart
 
 ```json
 {
   "cart": 1,
-  "book_id": 1,
+  "product_id": 1000001,
   "quantity": 2
 }
 ```
@@ -88,9 +122,20 @@ Auth service operational notes:
 ```json
 {
   "customer_id": 1,
+  "total_amount": "37980000.00",
   "payment_method": "cod",
   "shipping_method": "standard",
-  "shipping_address": "Ha Noi"
+  "shipping_address": "Hanoi",
+  "items": [
+    {
+      "product_id": 1000001,
+      "name": "Laptop Pro 14",
+      "category": "Laptop",
+      "price": "18990000.00",
+      "quantity": 2,
+      "line_total": "37980000.00"
+    }
+  ]
 }
 ```
 
@@ -99,8 +144,8 @@ Auth service operational notes:
 ```json
 {
   "customer_id": 1,
-  "book_id": 1,
+  "product_id": 1000001,
   "rating": 5,
-  "comment": "Rat hay"
+  "comment": "good"
 }
 ```

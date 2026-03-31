@@ -1,9 +1,18 @@
 from django.db import models
 
+
 class Cart(models.Model):
-    customer_id = models.IntegerField() # ID từ Customer Service [cite: 254]
+    customer_id = models.IntegerField(unique=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
 
 class CartItem(models.Model):
-    cart = models.ForeignKey(Cart, on_delete=models.CASCADE) # [cite: 256]
-    book_id = models.IntegerField() # ID từ Book Service [cite: 257]
-    quantity = models.IntegerField() # [cite: 259]
+    cart = models.ForeignKey(Cart, on_delete=models.CASCADE, related_name="items")
+    product_id = models.IntegerField()
+    quantity = models.PositiveIntegerField(default=1)
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        unique_together = ("cart", "product_id")

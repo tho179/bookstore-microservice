@@ -1,43 +1,64 @@
 {% extends "base.html" %}
-{% block title %}Dang ky | BookShop{% endblock %}
-
+{% block title %}Đăng ký tài khoản mới{% endblock %}
 {% block content %}
-<div style="max-width:520px; margin:28px auto;">
-    <div class="card">
-        <div class="card-title">Tao tai khoan khach hang</div>
-        <div class="card-body">
-            <form method="post" action="/auth/register/">
-                {% csrf_token %}
-                <div class="field">
-                    <label class="lbl">Ho va ten</label>
-                    <input class="input" name="full_name" placeholder="Nguyen Van A">
-                </div>
-                <div class="form-row">
-                    <div class="field">
-                        <label class="lbl">Ten dang nhap</label>
-                        <input class="input" name="username" required>
-                    </div>
-                    <div class="field">
-                        <label class="lbl">Email</label>
-                        <input class="input" type="email" name="email" required>
-                    </div>
-                </div>
-                <div class="form-row">
-                    <div class="field">
-                        <label class="lbl">Mat khau</label>
-                        <input class="input" type="password" name="password" required>
-                    </div>
-                    <div class="field">
-                        <label class="lbl">Xac nhan mat khau</label>
-                        <input class="input" type="password" name="confirm_password" required>
-                    </div>
-                </div>
-                <button class="btn btn-primary btn-block" type="submit">Dang ky tai khoan</button>
-            </form>
-            <div class="muted" style="margin-top:12px; font-size:13px;">
-                Da co tai khoan? <a href="/auth/login/" style="color:var(--primary);">Dang nhap</a>
-            </div>
-        </div>
+<section class="auth-shell panel">
+  <h2>Tạo tài khoản mới</h2>
+  <p class="muted">Đăng ký nhanh để mua hàng, theo dõi đơn và nhận ưu đãi cá nhân hóa.</p>
+
+  <form method="post" class="auth-grid" style="margin-top:12px;">
+    {% csrf_token %}
+    <input type="hidden" name="next" value="{{ next_url }}">
+
+    <div>
+      <div class="field-label">{{ form.first_name.label }}</div>
+      {{ form.first_name }}
+      {% for err in form.first_name.errors %}
+      <div class="field-error">{{ err }}</div>
+      {% endfor %}
     </div>
-</div>
+
+    <div>
+      <div class="field-label">{{ form.username.label }}</div>
+      {{ form.username }}
+      {% for err in form.username.errors %}
+      <div class="field-error">{{ err }}</div>
+      {% endfor %}
+    </div>
+
+    <div>
+      <div class="field-label">{{ form.email.label }}</div>
+      {{ form.email }}
+      {% for err in form.email.errors %}
+      <div class="field-error">{{ err }}</div>
+      {% endfor %}
+    </div>
+
+    <div>
+      <div class="field-label">{{ form.password1.label }}</div>
+      {{ form.password1 }}
+      {% for err in form.password1.errors %}
+      <div class="field-error">{{ err }}</div>
+      {% endfor %}
+    </div>
+
+    <div>
+      <div class="field-label">{{ form.password2.label }}</div>
+      {{ form.password2 }}
+      {% for err in form.password2.errors %}
+      <div class="field-error">{{ err }}</div>
+      {% endfor %}
+    </div>
+
+    {% for err in form.non_field_errors %}
+    <div class="field-error">{{ err }}</div>
+    {% endfor %}
+
+    <button class="btn btn-accent" type="submit">Tạo tài khoản</button>
+  </form>
+
+  <div class="muted" style="margin-top:12px;">
+    Đã có tài khoản?
+    <a href="/auth/login/?next={{ next_url }}">Đăng nhập ngay</a>
+  </div>
+</section>
 {% endblock %}

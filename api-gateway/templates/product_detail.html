@@ -1,70 +1,58 @@
 {% extends "base.html" %}
-{% block title %}Chi tiet san pham | BookShop{% endblock %}
-{% block nav_shop %}active{% endblock %}
-
+{% load store_extras %}
+{% block title %}Chi tiết sản phẩm{% endblock %}
 {% block content %}
-<div class="card" style="margin-bottom:12px;">
-    <div class="card-body">
-        <a class="btn btn-ghost btn-sm" href="/shop/">Quay lai shop</a>
-    </div>
-</div>
+<section class="panel" style="display:flex; justify-content:space-between; align-items:center; gap:12px; flex-wrap:wrap;">
+  <a class="btn" href="/shop/">Quay lại gian hàng</a>
+  <div class="muted" style="margin:0;">Danh mục: {{ product.category_label }}</div>
+</section>
 
-<div class="two-col">
-    <div class="card">
-        <div style="height:360px; background:#f8f1eb; display:flex; align-items:center; justify-content:center; overflow:hidden; border-radius:10px 10px 0 0;">
-            {% if product.image_url %}
-            <img src="{{ product.image_url }}" alt="{{ product.title }}" style="width:100%; height:100%; object-fit:cover;">
-            {% else %}
-            <span class="muted">Khong co anh san pham</span>
-            {% endif %}
-        </div>
-        <div class="card-body">
-            <div class="tag" style="margin-bottom:8px;">{{ category_label }}</div>
-            <div style="font-size:24px; font-weight:800; line-height:1.3;">{{ product.title }}</div>
-            <div class="muted" style="margin-top:6px;">Thuong hieu: {{ product.author }}</div>
-            <div class="price" style="font-size:28px; margin-top:10px;">{{ product.effective_price|default:product.price }} VNĐ</div>
-            {% if product.active_promotion %}
-            <div class="tag" style="margin-top:8px; background:#fff3f0; color:#b33f21;">{{ product.active_promotion.name }} -{{ product.active_promotion.discount_percent }}%</div>
-            {% endif %}
-            <div class="muted" style="margin-top:8px;">Ton kho: {{ product.stock }}</div>
-            <div style="margin-top:14px; line-height:1.6;">{{ product.description|default:"Dang cap nhat mo ta san pham." }}</div>
-        </div>
-    </div>
+<section class="panel" style="display:grid; gap:16px; grid-template-columns: minmax(260px, 1fr) minmax(320px, 1.4fr);">
+  <div class="product-thumb product-thumb--image" style="min-height: 280px; font-size: 20px;">
+    <img src="{{ product.image_url }}" alt="{{ product.name }}" loading="lazy" referrerpolicy="no-referrer">
+  </div>
 
-    <div>
-        <div class="card" style="margin-bottom:12px;">
-            <div class="card-title">Thao tac nhanh</div>
-            <div class="card-body">
-                <form method="post" action="/customer/cart/{{ customer_id }}/items/add/">
-                    {% csrf_token %}
-                    <input type="hidden" name="cart_id" value="{{ cart_id|default:'' }}">
-                    <input type="hidden" name="book_id" value="{{ product.id }}">
-                    <input type="hidden" name="next" value="{{ request.get_full_path }}">
-                    <div class="field">
-                        <label class="lbl">So luong</label>
-                        <input class="input" type="number" min="1" name="quantity" value="1">
-                    </div>
-                    <button class="btn btn-primary btn-block" type="submit" {% if product.stock <= 0 %}disabled{% endif %}>Them vao gio</button>
-                </form>
-                <form method="post" action="/customer/favorites/{{ product.id }}/toggle/" style="margin-top:10px;">
-                    {% csrf_token %}
-                    <input type="hidden" name="next" value="/shop/{{ product.id }}/">
-                    <button class="btn btn-outline btn-block" type="submit">{% if is_favorite %}Bo yeu thich{% else %}Them vao yeu thich{% endif %}</button>
-                </form>
-                <a class="btn btn-ghost btn-block mt-12" href="/customer/{{ customer_id }}/favorites/">Danh sach yeu thich ({{ favorite_count }})</a>
-            </div>
-        </div>
+  <div>
+    <h1 style="margin:0 0 10px; font-family:'Space Grotesk',sans-serif; font-size:clamp(24px, 4vw, 34px);">{{ product.name }}</h1>
+    <div class="price-text" style="font-size: 30px;">{{ product.price|vnd }}</div>
+    <div class="muted">Thương hiệu: {{ product.brand|default:"Đang cập nhật" }} | Mã model: {{ product.model_code|default:"N/A" }}</div>
+    <div class="muted">Bảo hành: {{ product.warranty_months }} tháng | Tồn kho: {{ product.stock }}</div>
 
-        <div class="card">
-            <div class="card-title">Tong quan gio hang</div>
-            <div class="card-body">
-                <div class="muted">So dong san pham</div>
-                <div style="font-size:24px; font-weight:800;">{{ item_count }}</div>
-                <div class="muted" style="margin-top:8px;">Tam tinh</div>
-                <div class="price" style="font-size:20px;">{{ total_price }} VNĐ</div>
-                <a class="btn btn-primary btn-block mt-12" href="/customer/cart/{{ customer_id }}/">Thanh toan ngay</a>
-            </div>
+    <p style="margin:14px 0 0; line-height:1.7;">{{ product.description|default:"Sản phẩm chính hãng, hỗ trợ bảo hành toàn quốc." }}</p>
+
+    {% if product.specs %}
+    <div class="panel" style="background: var(--surface-soft); border-style:dashed; margin:14px 0 0; box-shadow:none;">
+      <h3 style="font-size:16px; margin-bottom:10px;">Thông số nổi bật</h3>
+      <div class="form-row">
+        {% for key, value in product.specs.items %}
+        <div>
+          <div class="field-label">{{ key }}</div>
+          <div>{{ value }}</div>
         </div>
+        {% endfor %}
+      </div>
     </div>
-</div>
+    {% endif %}
+
+    <div style="display:flex; gap:10px; flex-wrap:wrap; margin-top:14px;">
+      {% if user.is_authenticated %}
+      <form method="post" action="/cart/add/{{ product.id }}/" style="display:flex; gap:8px;">
+        {% csrf_token %}
+        <input type="hidden" name="next" value="/shop/{{ product.id }}/">
+        <input class="qty-input" type="number" name="quantity" min="1" value="1">
+        <button class="btn btn-accent" type="submit">Thêm vào giỏ hàng</button>
+      </form>
+
+      <form class="inline-form" method="post" action="/favorites/toggle/{{ product.id }}/">
+        {% csrf_token %}
+        <input type="hidden" name="next" value="/shop/{{ product.id }}/">
+        <button class="btn btn-favorite {% if is_favorite %}active{% endif %}" type="submit">{% if is_favorite %}Đã yêu thích{% else %}Lưu yêu thích{% endif %}</button>
+      </form>
+      {% else %}
+      <a class="btn btn-accent" href="/auth/login/?next=/shop/{{ product.id }}/">Đăng nhập để mua hàng</a>
+      <a class="btn" href="/auth/register/?next=/shop/{{ product.id }}/">Tạo tài khoản nhanh</a>
+      {% endif %}
+    </div>
+  </div>
+</section>
 {% endblock %}

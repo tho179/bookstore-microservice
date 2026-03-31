@@ -1,0 +1,79 @@
+{% extends "base.html" %}
+{% load store_extras %}
+{% block title %}Thanh toán đơn hàng{% endblock %}
+{% block content %}
+<section class="panel">
+  <h2>Thanh toán</h2>
+  <div class="muted">Tổng số lượng: {{ total_quantity }} | Tổng tiền: {{ total|vnd }}</div>
+</section>
+
+<section class="panel">
+  {% if items %}
+    <div class="table-wrap">
+      <table>
+        <thead>
+          <tr>
+            <th>Sản phẩm</th>
+            <th>Số lượng</th>
+            <th>Thành tiền</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for item in items %}
+          <tr>
+            <td>{{ item.product.name }}</td>
+            <td>{{ item.quantity }}</td>
+            <td>{{ item.line_total|vnd }}</td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+
+    <form method="post" action="/orders/create/" style="margin-top:16px; display:grid; gap:10px;">
+      {% csrf_token %}
+      <div class="form-row">
+        <div>
+          <div class="field-label">Tài khoản mua hàng</div>
+          <select name="customer_id">
+            {% for customer in customers %}
+              <option value="{{ customer.id }}" {% if customer.id == selected_customer_id %}selected{% endif %}>
+                #{{ customer.id }} - {{ customer.name }} ({{ customer.email }})
+              </option>
+            {% endfor %}
+          </select>
+        </div>
+
+        <div>
+          <div class="field-label">Thanh toán</div>
+          <select name="payment_method">
+            <option value="cod">COD - Thanh toán khi nhận hàng</option>
+            <option value="bank_transfer">Chuyển khoản ngân hàng</option>
+            <option value="credit_card">Thẻ tín dụng</option>
+          </select>
+        </div>
+
+        <div>
+          <div class="field-label">Giao hàng</div>
+          <select name="shipping_method">
+            <option value="standard">Tiêu chuẩn (2-4 ngày)</option>
+            <option value="express">Nhanh (24h - 48h)</option>
+          </select>
+        </div>
+      </div>
+
+      <div>
+        <div class="field-label">Địa chỉ nhận hàng</div>
+        <textarea name="shipping_address" placeholder="Số nhà, đường, phường/xã, quận/huyện, tỉnh/thành"></textarea>
+      </div>
+
+      <div style="display:flex; justify-content:space-between; align-items:center; gap:10px; flex-wrap:wrap;">
+        <strong style="font-size:18px;">Cần thanh toán: <span class="price-text" style="font-size:24px;">{{ total|vnd }}</span></strong>
+        <button class="btn btn-accent" type="submit">Đặt hàng ngay</button>
+      </div>
+    </form>
+  {% else %}
+    <div>Không có sản phẩm nào để thanh toán.</div>
+  {% endif %}
+</section>
+{% endblock %}

@@ -1,137 +1,199 @@
 services:
+  laptop-db:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_DB: laptop_db
+      POSTGRES_USER: laptop_user
+      POSTGRES_PASSWORD: laptop_pass
+    volumes:
+      - laptop_postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U $$POSTGRES_USER -d $$POSTGRES_DB"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  mobile-db:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_DB: mobile_db
+      POSTGRES_USER: mobile_user
+      POSTGRES_PASSWORD: mobile_pass
+    volumes:
+      - mobile_postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U $$POSTGRES_USER -d $$POSTGRES_DB"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  staff-db:
+    image: mysql:8.0
+    command: --default-authentication-plugin=mysql_native_password
+    environment:
+      MYSQL_DATABASE: staff_db
+      MYSQL_USER: staff_user
+      MYSQL_PASSWORD: staff_pass
+      MYSQL_ROOT_PASSWORD: root_staff_pass
+    volumes:
+      - staff_mysql_data:/var/lib/mysql
+    healthcheck:
+      test: ["CMD", "mysqladmin", "ping", "-h", "localhost", "-uroot", "-p$$MYSQL_ROOT_PASSWORD"]
+      interval: 5s
+      timeout: 5s
+      retries: 15
+
+  customer-db:
+    image: mysql:8.0
+    command: --default-authentication-plugin=mysql_native_password
+    environment:
+      MYSQL_DATABASE: customer_db
+      MYSQL_USER: customer_user
+      MYSQL_PASSWORD: customer_pass
+      MYSQL_ROOT_PASSWORD: root_customer_pass
+    volumes:
+      - customer_mysql_data:/var/lib/mysql
+    healthcheck:
+      test: ["CMD", "mysqladmin", "ping", "-h", "localhost", "-uroot", "-p$$MYSQL_ROOT_PASSWORD"]
+      interval: 5s
+      timeout: 5s
+      retries: 15
+
+  laptop-service:
+    build: ./laptop-service
+    depends_on:
+      laptop-db:
+        condition: service_healthy
+    environment:
+      DB_HOST: laptop-db
+      DB_PORT: 5432
+      DB_NAME: laptop_db
+      DB_USER: laptop_user
+      DB_PASSWORD: laptop_pass
+      SERVICE_SHARED_TOKEN: project-internal-token
+    command: sh -c "until python manage.py migrate --noinput; do echo 'Waiting for laptop-db...'; sleep 2; done; python manage.py seed_products; python manage.py runserver 0.0.0.0:8000"
+    ports:
+      - "8101:8000"
+
+  mobile-service:
+    build: ./mobile-service
+    depends_on:
+      mobile-db:
+        condition: service_healthy
+    environment:
+      DB_HOST: mobile-db
+      DB_PORT: 5432
+      DB_NAME: mobile_db
+      DB_USER: mobile_user
+      DB_PASSWORD: mobile_pass
+      SERVICE_SHARED_TOKEN: project-internal-token
+    command: sh -c "until python manage.py migrate --noinput; do echo 'Waiting for mobile-db...'; sleep 2; done; python manage.py seed_products; python manage.py runserver 0.0.0.0:8000"
+    ports:
+      - "8102:8000"
+
+  staff-service:
+    build: ./staff-service
+    depends_on:
+      staff-db:
+        condition: service_healthy
+    environment:
+      DB_HOST: staff-db
+      DB_PORT: 3306
+      DB_NAME: staff_db
+      DB_USER: staff_user
+      DB_PASSWORD: staff_pass
+      SERVICE_SHARED_TOKEN: project-internal-token
+    command: sh -c "until python manage.py migrate --noinput; do echo 'Waiting for staff-db...'; sleep 2; done; python manage.py runserver 0.0.0.0:8000"
+    ports:
+      - "8103:8000"
+
   customer-service:
     build: ./customer-service
+    depends_on:
+      customer-db:
+        condition: service_healthy
     environment:
-      SERVICE_SHARED_TOKEN: bookstore-internal-token
-    command: sh -c "python manage.py migrate --noinput; python manage.py runserver 0.0.0.0:8000"
-    ports: ["8001:8000"]
-
-  book-service:
-    build: ./book-service
-    environment:
-      SERVICE_SHARED_TOKEN: bookstore-internal-token
-    command: sh -c "python manage.py migrate --noinput; python manage.py seed_products; python manage.py runserver 0.0.0.0:8000"
-    ports: ["8002:8000"]
-
-  fashion-service:
-    build: ./fashion-service
-    environment:
-      SERVICE_SHARED_TOKEN: bookstore-internal-token
-    command: sh -c "python manage.py migrate --noinput; python manage.py seed_products; python manage.py runserver 0.0.0.0:8000"
-    ports: ["8013:8000"]
-
-  household-service:
-    build: ./household-service
-    environment:
-      SERVICE_SHARED_TOKEN: bookstore-internal-token
-    command: sh -c "python manage.py migrate --noinput; python manage.py seed_products; python manage.py runserver 0.0.0.0:8000"
-    ports: ["8014:8000"]
-
-  electronics-service:
-    build: ./electronics-service
-    environment:
-      SERVICE_SHARED_TOKEN: bookstore-internal-token
-    command: sh -c "python manage.py migrate --noinput; python manage.py seed_products; python manage.py runserver 0.0.0.0:8000"
-    ports: ["8015:8000"]
+      DB_HOST: customer-db
+      DB_PORT: 3306
+      DB_NAME: customer_db
+      DB_USER: customer_user
+      DB_PASSWORD: customer_pass
+      SERVICE_SHARED_TOKEN: project-internal-token
+    command: sh -c "until python manage.py migrate --noinput; do echo 'Waiting for customer-db...'; sleep 2; done; python manage.py runserver 0.0.0.0:8000"
+    ports:
+      - "8104:8000"
 
   cart-service:
     build: ./cart-service
     environment:
-      SERVICE_SHARED_TOKEN: bookstore-internal-token
-    command: sh -c "python manage.py migrate --noinput; python manage.py runserver 0.0.0.0:8000"
-    ports: ["8003:8000"]
+      SERVICE_SHARED_TOKEN: project-internal-token
+    command: sh -c "python manage.py migrate --noinput --run-syncdb; python manage.py runserver 0.0.0.0:8000"
+    ports:
+      - "8201:8000"
 
-  catalog-service:
-    build: ./catalog-service
-    environment:
-      SERVICE_SHARED_TOKEN: bookstore-internal-token
-    command: sh -c "python manage.py migrate --noinput; python manage.py runserver 0.0.0.0:8000"
-    ports: ["8004:8000"]
-
-  order-service:
-    build: ./order-service
+  comment-rate-service:
+    build: ./comment-rate-service
     depends_on:
-      - book-service
-      - fashion-service
-      - household-service
-      - electronics-service
-      - pay-service
-      - ship-service
+      - order-service
     environment:
-      SERVICE_SHARED_TOKEN: bookstore-internal-token
-    command: sh -c "python manage.py migrate --noinput; python manage.py runserver 0.0.0.0:8000"
-    ports: ["8005:8000"]
-
-  ship-service:
-    build: ./ship-service
-    environment:
-      SERVICE_SHARED_TOKEN: bookstore-internal-token
-    command: sh -c "python manage.py migrate --noinput; python manage.py runserver 0.0.0.0:8000"
-    ports: ["8006:8000"]
+      ORDER_SERVICE_URL: http://order-service:8000
+      SERVICE_SHARED_TOKEN: project-internal-token
+    command: sh -c "python manage.py migrate --noinput --run-syncdb; python manage.py runserver 0.0.0.0:8000"
+    ports:
+      - "8202:8000"
 
   pay-service:
     build: ./pay-service
     environment:
-      SERVICE_SHARED_TOKEN: bookstore-internal-token
-    command: sh -c "python manage.py migrate --noinput; python manage.py runserver 0.0.0.0:8000"
-    ports: ["8007:8000"]
+      SERVICE_SHARED_TOKEN: project-internal-token
+    command: sh -c "python manage.py migrate --noinput --run-syncdb; python manage.py runserver 0.0.0.0:8000"
+    ports:
+      - "8203:8000"
 
-  comment-rate-service:
-    build: ./comment-rate-service
+  ship-service:
+    build: ./ship-service
     environment:
-      SERVICE_SHARED_TOKEN: bookstore-internal-token
-    command: sh -c "python manage.py migrate --noinput; python manage.py runserver 0.0.0.0:8000"
-    ports: ["8008:8000"]
+      SERVICE_SHARED_TOKEN: project-internal-token
+    command: sh -c "python manage.py migrate --noinput --run-syncdb; python manage.py runserver 0.0.0.0:8000"
+    ports:
+      - "8204:8000"
 
-  recommender-ai-service:
-    build: ./recommender-ai-service
+  order-service:
+    build: ./order-service
+    depends_on:
+      - pay-service
+      - ship-service
     environment:
-      SERVICE_SHARED_TOKEN: bookstore-internal-token
-    command: sh -c "python manage.py migrate --noinput; python manage.py runserver 0.0.0.0:8000"
-    ports: ["8009:8000"]
-
-  staff-service:
-    build: ./staff-service
-    environment:
-      SERVICE_SHARED_TOKEN: bookstore-internal-token
-    command: sh -c "python manage.py migrate --noinput; python manage.py runserver 0.0.0.0:8000"
-    ports: ["8010:8000"]
-
-  manager-service:
-    build: ./manager-service
-    environment:
-      SERVICE_SHARED_TOKEN: bookstore-internal-token
-    command: sh -c "python manage.py migrate --noinput; python manage.py runserver 0.0.0.0:8000"
-    ports: ["8011:8000"]
-
-  auth-service:
-    build: ./auth-service
-    environment:
-      JWT_SECRET: bookstore-jwt-secret
-      AUTH_ADMIN_TOKEN: bookstore-auth-admin-token
-      AUTH_ADMIN_USERNAME: admin
-      AUTH_ADMIN_EMAIL: admin@bookstore.local
-      AUTH_ADMIN_PASSWORD: Admin@123456
-    command: sh -c "python manage.py migrate --noinput; python manage.py seed_admin; python manage.py runserver 0.0.0.0:8000"
-    ports: ["8012:8000"]
+      PAY_SERVICE_URL: http://pay-service:8000
+      SHIP_SERVICE_URL: http://ship-service:8000
+      SERVICE_SHARED_TOKEN: project-internal-token
+    command: sh -c "python manage.py migrate --noinput --run-syncdb; python manage.py runserver 0.0.0.0:8000"
+    ports:
+      - "8205:8000"
 
   api-gateway:
     build: ./api-gateway
     depends_on:
-      - auth-service
+      - laptop-service
+      - mobile-service
       - customer-service
       - cart-service
-      - book-service
-      - fashion-service
-      - household-service
-      - electronics-service
-      - catalog-service
       - order-service
       - comment-rate-service
-      - recommender-ai-service
     environment:
-      AUTH_SERVICE_URL: http://auth-service:8000
-      SERVICE_SHARED_TOKEN: bookstore-internal-token
-      AUTH_ADMIN_TOKEN: bookstore-auth-admin-token
+      LAPTOP_SERVICE_URL: http://laptop-service:8000
+      MOBILE_SERVICE_URL: http://mobile-service:8000
+      CUSTOMER_SERVICE_URL: http://customer-service:8000
+      CART_SERVICE_URL: http://cart-service:8000
+      ORDER_SERVICE_URL: http://order-service:8000
+      COMMENT_RATE_SERVICE_URL: http://comment-rate-service:8000
+      SERVICE_SHARED_TOKEN: project-internal-token
     command: sh -c "python manage.py migrate --noinput; python manage.py runserver 0.0.0.0:8000"
-    ports: ["8000:8000"]
+    ports:
+      - "8000:8000"
+
+volumes:
+  laptop_postgres_data:
+  mobile_postgres_data:
+  staff_mysql_data:
+  customer_mysql_data:

@@ -1,0 +1,58 @@
+{% extends "base.html" %}
+{% load store_extras %}
+{% block title %}Đơn hàng của tôi{% endblock %}
+{% block content %}
+<section class="panel">
+  <h2>Lịch sử đơn hàng</h2>
+  <p class="muted">Theo dõi trạng thái đơn, thông tin giao hàng và tổng tiền đã đặt.</p>
+</section>
+
+{% for order in orders %}
+<section class="panel">
+  <div style="display:flex; justify-content:space-between; align-items:flex-start; gap:10px; flex-wrap:wrap;">
+    <div>
+      <div style="font-size:18px; font-weight:800; color:#111827;">Đơn #{{ order.id }}</div>
+      <div class="muted">Khách hàng: {{ order.customer_id }} | Tạo lúc: {{ order.created_at }}</div>
+    </div>
+    <div style="text-align:right;">
+      <div class="status-pill">{{ order.status }}</div>
+      <div style="margin-top:8px; font-weight:700;">Tổng: <span class="price-text" style="font-size:22px;">{{ order.total|vnd }}</span></div>
+    </div>
+  </div>
+
+  <div class="muted" style="margin-top:8px;">Thanh toán: {{ order.payment_method }} | Vận chuyển: {{ order.shipping_method }}</div>
+  {% if order.shipping_address %}
+  <div class="muted">Địa chỉ: {{ order.shipping_address }}</div>
+  {% endif %}
+
+  <div class="table-wrap" style="margin-top:12px;">
+    <table>
+      <thead>
+        <tr>
+          <th>Sản phẩm</th>
+          <th>Danh mục</th>
+          <th>Đơn giá</th>
+          <th>Số lượng</th>
+          <th>Thành tiền</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for item in order.items %}
+        <tr>
+          <td>{{ item.name }}</td>
+          <td>{{ item.category }}</td>
+          <td>{{ item.price|vnd }}</td>
+          <td>{{ item.quantity }}</td>
+          <td>{{ item.line_total|vnd }}</td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</section>
+{% endfor %}
+
+{% if not orders %}
+<div class="panel">Bạn chưa có đơn hàng nào. Hãy thêm sản phẩm vào giỏ để bắt đầu.</div>
+{% endif %}
+{% endblock %}

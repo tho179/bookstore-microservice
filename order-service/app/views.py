@@ -1,35 +1,33 @@
-from decimal import Decimal
 import os
+from decimal import Decimal, InvalidOperation
 
 import requests
+from django.db import transaction
+from rest_framework import status
 from rest_framework.response import Response
 from rest_framework.views import APIView
 
 from .models import Order, OrderItem
 from .serializers import OrderSerializer
 
-CART_SERVICE_URL = "http://cart-service:8000"
-BOOK_SERVICE_URL = "http://book-service:8000"
-FASHION_SERVICE_URL = "http://fashion-service:8000"
-HOUSEHOLD_SERVICE_URL = "http://household-service:8000"
-ELECTRONICS_SERVICE_URL = "http://electronics-service:8000"
-PAY_SERVICE_URL = "http://pay-service:8000"
-SHIP_SERVICE_URL = "http://ship-service:8000"
+PAY_SERVICE_URL = os.getenv("PAY_SERVICE_URL", "http://pay-service:8000")
+SHIP_SERVICE_URL = os.getenv("SHIP_SERVICE_URL", "http://ship-service:8000")
+REQUEST_TIMEOUT = float(os.getenv("REQUEST_TIMEOUT", "5"))
 SERVICE_SHARED_TOKEN = os.getenv("SERVICE_SHARED_TOKEN", "")
 
-PRODUCT_ID_OFFSETS = {
-    "sach": 1000000,
-    "quan_ao": 2000000,
-    "gia_dung": 3000000,
-    "dien_tu": 4000000,
-}
 
-PRODUCT_SOURCES = {
-    "sach": {"base_url": BOOK_SERVICE_URL, "list_path": "/books/"},
-    "quan_ao": {"base_url": FASHION_SERVICE_URL, "list_path": "/products/"},
-    "gia_dung": {"base_url": HOUSEHOLD_SERVICE_URL, "list_path": "/products/"},
-    "dien_tu": {"base_url": ELECTRONICS_SERVICE_URL, "list_path": "/products/"},
-}
+def _to_int(raw_value, default=0):
+    try:
+        return int(raw_value)
+    except (TypeError, ValueError):
+        return default
+
+
+def _to_decimal(raw_value):
+    try:
+        return Decimal(str(raw_value))
+    except (InvalidOperation, TypeError, ValueError):
+        return None
 
 
 def _internal_headers():
@@ -38,30 +36,17 @@ def _internal_headers():
     return {"X-Service-Token": SERVICE_SHARED_TOKEN}
 
 
-def _encode_product_id(category, local_id):
-    return PRODUCT_ID_OFFSETS.get(category, 0) + int(local_id)
-
-
-def _fetch_product_price_map():
-    products = {}
-    headers = _internal_headers()
-    for category, source in PRODUCT_SOURCES.items():
-        response = requests.get(
-            f"{source['base_url']}{source['list_path']}",
-            timeout=5,
-            headers=headers,
-        )
-        response.raise_for_status()
-        rows = response.json() if isinstance(response.json(), list) else []
-        for row in rows:
-            local_id = int(row.get("id", 0))
-            if local_id <= 0:
-                continue
-            global_id = _encode_product_id(category, local_id)
-            products[global_id] = Decimal(str(row.get("effective_price", row.get("price", 0))))
-            if category == "sach":
-                products[local_id] = products[global_id]
-    return products
+def _post_json(url, payload):
+    try:
+        response = requests.post(url, json=payload, timeout=REQUEST_TIMEOUT, headers=_internal_headers())
+        body = response.json() if response.content else {}
+        if response.status_code >= 400:
+            return False, body, f"{url} failed ({response.status_code})."
+        return True, body, None
+    except requests.RequestException:
+        return False, None, f"Cannot connect to {url}."
+    except ValueError:
+        return False, None, f"Invalid JSON response from {url}."
 
 
 class HealthCheck(APIView):
@@ -71,142 +56,127 @@ class HealthCheck(APIView):
 
 class OrderListCreate(APIView):
     def get(self, request):
-        serializer = OrderSerializer(Order.objects.all(), many=True)
+        queryset = Order.objects.all().order_by("-id")
+        customer_id = _to_int(request.GET.get("customer_id"), 0)
+        if customer_id > 0:
+            queryset = queryset.filter(customer_id=customer_id)
+
+        serializer = OrderSerializer(queryset, many=True)
         return Response(serializer.data)
 
+    @transaction.atomic
     def post(self, request):
-        customer_id = request.data.get("customer_id")
-        payment_method = request.data.get("payment_method", "cod")
-        shipping_method = request.data.get("shipping_method", "standard")
-        shipping_address = request.data.get("shipping_address", "Unknown")
-
-        try:
-            cart_response = requests.get(
-                f"{CART_SERVICE_URL}/carts/{customer_id}/",
-                timeout=5,
-                headers=_internal_headers(),
+        customer_id = _to_int(request.data.get("customer_id"), -1)
+        items = request.data.get("items")
+        if customer_id < 0 or not isinstance(items, list) or not items:
+            return Response(
+                {"error": "customer_id and non-empty items are required."},
+                status=status.HTTP_400_BAD_REQUEST,
             )
-            cart_response.raise_for_status()
-            products_by_id = _fetch_product_price_map()
-        except requests.RequestException:
-            return Response({"error": "Dependency unavailable"}, status=503)
 
-        cart_data = cart_response.json()
-        items = cart_data.get("items", [])
-        if not items:
-            return Response({"error": "Cart is empty"}, status=400)
+        total_amount = _to_decimal(request.data.get("total_amount") or request.data.get("total"))
+        if total_amount is None or total_amount < 0:
+            return Response({"error": "total_amount is invalid."}, status=status.HTTP_400_BAD_REQUEST)
+
+        payment_method = (request.data.get("payment_method") or "cod").strip() or "cod"
+        shipping_method = (request.data.get("shipping_method") or "standard").strip() or "standard"
+        shipping_address = (request.data.get("shipping_address") or "").strip()
 
         order = Order.objects.create(
             customer_id=customer_id,
-            cart_id=cart_data.get("cart_id", 0),
+            total_amount=total_amount,
             payment_method=payment_method,
             shipping_method=shipping_method,
             shipping_address=shipping_address,
-            status="pending",
+            status=Order.STATUS_PENDING,
         )
 
-        total_amount = Decimal("0")
-        for item in items:
-            product_id = item.get("book_id")
-            price = products_by_id.get(product_id)
-            if price is None:
-                order.status = "failed"
-                order.save(update_fields=["status"])
-                return Response({"error": f"Product {item['book_id']} not found"}, status=400)
+        for raw_item in items:
+            if not isinstance(raw_item, dict):
+                continue
+
+            product_id = _to_int(raw_item.get("product_id"), 0)
+            quantity = _to_int(raw_item.get("quantity"), 0)
+            price = _to_decimal(raw_item.get("price"))
+            line_total = _to_decimal(raw_item.get("line_total"))
+            name = (raw_item.get("name") or "").strip() or f"Product #{product_id}"
+            category = (raw_item.get("category") or "").strip()
+
+            if product_id <= 0 or quantity <= 0 or price is None or line_total is None:
+                continue
+
             OrderItem.objects.create(
                 order=order,
-                book_id=item["book_id"],
-                quantity=item["quantity"],
+                product_id=product_id,
+                name=name,
+                category=category,
                 price=price,
+                quantity=quantity,
+                line_total=line_total,
             )
-            total_amount += price * item["quantity"]
 
-        order.total_amount = total_amount
-        order.save(update_fields=["total_amount"])
+        if not order.items.exists():
+            order.status = Order.STATUS_FAILED
+            order.save(update_fields=["status", "updated_at"])
+            return Response({"error": "No valid order items."}, status=status.HTTP_400_BAD_REQUEST)
 
-        payment_response = None
-        shipment_response = None
-        try:
-            payment_response = requests.post(
-                f"{PAY_SERVICE_URL}/payments/reserve/",
-                json={
-                    "order_id": order.id,
-                    "customer_id": customer_id,
-                    "amount": str(total_amount),
-                    "method": payment_method,
-                },
-                timeout=5,
-                headers=_internal_headers(),
-            )
-            payment_response.raise_for_status()
+        pay_ok, pay_data, pay_error = _post_json(
+            f"{PAY_SERVICE_URL}/payments/reserve/",
+            {
+                "order_id": order.id,
+                "customer_id": customer_id,
+                "amount": str(total_amount),
+                "method": payment_method,
+            },
+        )
+        if not pay_ok:
+            order.status = Order.STATUS_FAILED
+            order.save(update_fields=["status", "updated_at"])
+            return Response({"error": pay_error or "Payment reservation failed."}, status=status.HTTP_502_BAD_GATEWAY)
 
-            shipment_response = requests.post(
-                f"{SHIP_SERVICE_URL}/shipments/reserve/",
-                json={
-                    "order_id": order.id,
-                    "customer_id": customer_id,
-                    "address": shipping_address,
-                    "method": shipping_method,
-                },
-                timeout=5,
-                headers=_internal_headers(),
-            )
-            shipment_response.raise_for_status()
-        except requests.RequestException:
-            if payment_response is not None and payment_response.ok:
-                payment_id = payment_response.json().get("id")
-                requests.post(
-                    f"{PAY_SERVICE_URL}/payments/{payment_id}/cancel/",
-                    timeout=5,
-                    headers=_internal_headers(),
-                )
-            if shipment_response is not None and shipment_response.ok:
-                shipment_id = shipment_response.json().get("id")
-                requests.post(
-                    f"{SHIP_SERVICE_URL}/shipments/{shipment_id}/cancel/",
-                    timeout=5,
-                    headers=_internal_headers(),
-                )
-            order.status = "failed"
-            order.save(update_fields=["status"])
-            return Response({"error": "Order orchestration failed"}, status=502)
+        payment_id = _to_int((pay_data or {}).get("id"), 0)
 
-        order.payment_reference = str(payment_response.json().get("id", ""))
-        order.shipment_reference = str(shipment_response.json().get("id", ""))
-        order.status = "confirmed"
-        order.save(update_fields=["payment_reference", "shipment_reference", "status"])
-        return Response(OrderSerializer(order).data, status=201)
+        ship_ok, ship_data, ship_error = _post_json(
+            f"{SHIP_SERVICE_URL}/shipments/reserve/",
+            {
+                "order_id": order.id,
+                "customer_id": customer_id,
+                "address": shipping_address,
+                "method": shipping_method,
+            },
+        )
+        if not ship_ok:
+            if payment_id > 0:
+                _post_json(f"{PAY_SERVICE_URL}/payments/{payment_id}/cancel/", {})
+
+            order.status = Order.STATUS_FAILED
+            order.payment_id = payment_id if payment_id > 0 else None
+            order.save(update_fields=["status", "payment_id", "updated_at"])
+            return Response({"error": ship_error or "Shipment reservation failed."}, status=status.HTTP_502_BAD_GATEWAY)
+
+        shipment_id = _to_int((ship_data or {}).get("id"), 0)
+
+        order.status = Order.STATUS_CONFIRMED
+        order.payment_id = payment_id if payment_id > 0 else None
+        order.shipment_id = shipment_id if shipment_id > 0 else None
+        order.save(update_fields=["status", "payment_id", "shipment_id", "updated_at"])
+
+        serializer = OrderSerializer(order)
+        return Response(serializer.data, status=status.HTTP_201_CREATED)
 
 
-class PurchasedBooksView(APIView):
+class PurchasedProductsByCustomer(APIView):
     def get(self, request, customer_id):
-        purchased = {}
-        orders = Order.objects.filter(customer_id=customer_id, status="confirmed").prefetch_related("items")
-        for order in orders:
-            for item in order.items.all():
-                entry = purchased.setdefault(item.book_id, {"book_id": item.book_id, "quantity": 0, "order_ids": []})
-                entry["quantity"] += item.quantity
-                entry["order_ids"].append(order.id)
+        order_ids = Order.objects.filter(customer_id=customer_id, status=Order.STATUS_CONFIRMED).values_list("id", flat=True)
+        product_ids = (
+            OrderItem.objects.filter(order_id__in=order_ids)
+            .values_list("product_id", flat=True)
+            .distinct()
+        )
 
-        books = list(purchased.values())
-        return Response({
-            "customer_id": customer_id,
-            "book_ids": [item["book_id"] for item in books],
-            "books": books,
-        })
-
-
-class PurchasedBookDetailView(APIView):
-    def get(self, request, customer_id, book_id):
-        order_items = OrderItem.objects.filter(
-            order__customer_id=customer_id,
-            order__status="confirmed",
-            book_id=book_id,
-        ).select_related("order")
-        return Response({
-            "customer_id": customer_id,
-            "book_id": book_id,
-            "purchased": order_items.exists(),
-            "order_ids": [item.order_id for item in order_items],
-            "quantity": sum(item.quantity for item in order_items),
-        })
+        return Response(
+            {
+                "customer_id": customer_id,
+                "product_ids": list(product_ids),
+            }
+        )

@@ -5,13 +5,10 @@ ENV PYTHONUNBUFFERED 1
 
 WORKDIR /app
 
-# Sao chép file requirements vào trước
 COPY requirements.txt /app/
-
-# Chạy lệnh cài đặt với quyền ưu tiên
 RUN pip install --upgrade pip
 RUN pip install --no-cache-dir -r requirements.txt
 
 COPY . /app/
 
-CMD ["python", "manage.py", "runserver", "0.0.0.0:8000"]
+CMD ["sh", "-c", "python manage.py migrate --noinput; python manage.py runserver 0.0.0.0:8000"]

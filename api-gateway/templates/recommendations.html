@@ -1,0 +1,36 @@
+{% extends "base.html" %}
+{% load store_extras %}
+{% block title %}Gợi ý dành riêng cho bạn{% endblock %}
+{% block content %}
+<section class="panel">
+  <h2>Gợi ý dành riêng cho bạn</h2>
+  <div class="muted">Hệ thống đề xuất dựa trên lịch sử đặt hàng, danh sách yêu thích và đánh giá của bạn.</div>
+</section>
+
+<section class="products-grid">
+  {% for product in recommended_products %}
+  <article class="product-card">
+    <div class="product-thumb product-thumb--image">
+      <img src="{{ product.image_url }}" alt="{{ product.name }}" loading="lazy" referrerpolicy="no-referrer">
+    </div>
+    <div class="muted" style="margin:0;">Thương hiệu: {{ product.brand|default:"Đang cập nhật" }}</div>
+    <h3 class="product-title">{{ product.name }}</h3>
+    <div class="muted" style="margin:0;">Còn lại: {{ product.stock }} sản phẩm</div>
+    <div class="price-text">{{ product.price|vnd }}</div>
+    <div style="display:flex; gap:8px; margin-top:auto; flex-wrap:wrap;">
+      <a class="btn" href="/shop/{{ product.id }}/">Xem chi tiết</a>
+      <form class="inline-form" method="post" action="/cart/add/{{ product.id }}/">
+        {% csrf_token %}
+        <input type="hidden" name="next" value="/recommendations/">
+        <input type="hidden" name="quantity" value="1">
+        <button class="btn btn-accent" type="submit">Thêm vào giỏ</button>
+      </form>
+    </div>
+  </article>
+  {% endfor %}
+</section>
+
+{% if not recommended_products %}
+<div class="panel">Tạm thời chưa có gợi ý. Bạn hãy thêm yêu thích hoặc đặt đơn đầu tiên để nhận đề xuất tốt hơn.</div>
+{% endif %}
+{% endblock %}

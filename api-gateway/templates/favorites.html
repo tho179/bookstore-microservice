@@ -1,47 +1,34 @@
 {% extends "base.html" %}
-{% block title %}San pham yeu thich | BookShop{% endblock %}
-{% block nav_favorites %}active{% endblock %}
-
+{% load store_extras %}
+{% block title %}Sản phẩm yêu thích{% endblock %}
 {% block content %}
-<div class="flex mt-8" style="margin-bottom:12px; justify-content:space-between; align-items:center;">
-    <div>
-        <div style="font-size:18px; font-weight:700;">San pham yeu thich</div>
-        <div class="muted" style="font-size:13px;">{{ favorite_count }} san pham trong danh sach cua ban.</div>
-    </div>
-    <a class="btn btn-ghost btn-sm" href="/shop/">Quay lai mua sam</a>
-</div>
+<section class="panel">
+  <h2>Danh sách yêu thích</h2>
+  <p class="muted">Lưu nhanh những sản phẩm bạn quan tâm để mua sau.</p>
+</section>
 
-<div class="card">
-    <div class="card-title">Danh sach yeu thich</div>
-    {% if favorites %}
-    <div style="padding:16px; display:grid; grid-template-columns:repeat(auto-fill,minmax(250px,1fr)); gap:12px;">
-        {% for product in favorites %}
-        <div style="border:1px solid var(--line); border-radius:10px; padding:12px; background:#fff; display:flex; flex-direction:column; gap:10px;">
-            <div style="height:140px; border-radius:8px; overflow:hidden; background:#f8f1eb; display:flex; align-items:center; justify-content:center;">
-                {% if product.image_url %}
-                <img src="{{ product.image_url }}" alt="{{ product.title }}" style="width:100%; height:100%; object-fit:cover;">
-                {% else %}
-                <span class="muted">Khong co anh</span>
-                {% endif %}
-            </div>
-            <div class="tag" style="width:max-content;">{{ product.category_label }}</div>
-            <div class="fw-600">{{ product.title }}</div>
-            <div class="muted" style="font-size:13px;">{{ product.author }}</div>
-            <div class="price" style="font-size:18px;">{{ product.effective_price|default:product.price }} VNĐ</div>
-
-            <div class="flex" style="justify-content:space-between; margin-top:auto;">
-                <a class="btn btn-ghost btn-sm" href="/shop/{{ product.id }}/">Xem chi tiet</a>
-                <form method="post" action="/customer/favorites/{{ product.id }}/toggle/">
-                    {% csrf_token %}
-                    <input type="hidden" name="next" value="/customer/{{ customer_id }}/favorites/">
-                    <button class="btn btn-danger btn-sm" type="submit">Bo yeu thich</button>
-                </form>
-            </div>
-        </div>
-        {% endfor %}
+<section class="products-grid">
+  {% for product in favorites %}
+  <article class="product-card">
+    <div class="product-thumb product-thumb--image">
+      <img src="{{ product.image_url }}" alt="{{ product.name }}" loading="lazy" referrerpolicy="no-referrer">
     </div>
-    {% else %}
-    <div class="empty">Ban chua co san pham yeu thich nao.</div>
-    {% endif %}
-</div>
+    <div class="muted" style="margin:0;">{{ product.category_label }} | {{ product.brand|default:"Đang cập nhật" }}</div>
+    <h3 class="product-title">{{ product.name }}</h3>
+    <div class="price-text">{{ product.price|vnd }}</div>
+    <div style="display:flex; gap:8px; flex-wrap:wrap; margin-top:auto;">
+      <a class="btn" href="/shop/{{ product.id }}/">Xem chi tiết</a>
+      <form class="inline-form" method="post" action="/favorites/toggle/{{ product.id }}/">
+        {% csrf_token %}
+        <input type="hidden" name="next" value="/favorites/">
+        <button class="btn btn-favorite active" type="submit">Xóa khỏi yêu thích</button>
+      </form>
+    </div>
+  </article>
+  {% endfor %}
+</section>
+
+{% if not favorites %}
+<div class="panel">Bạn chưa có sản phẩm yêu thích. Hãy xem gian hàng và lưu sản phẩm bạn thích.</div>
+{% endif %}
 {% endblock %}

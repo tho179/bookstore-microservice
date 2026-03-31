@@ -1,3 +1,4 @@
+from rest_framework import status
 from rest_framework.response import Response
 from rest_framework.views import APIView
 
@@ -5,33 +6,46 @@ from .models import Shipment
 from .serializers import ShipmentSerializer
 
 
+def _to_int(raw_value, default=0):
+    try:
+        return int(raw_value)
+    except (TypeError, ValueError):
+        return default
+
+
 class HealthCheck(APIView):
     def get(self, request):
         return Response({"service": "ship-service", "status": "ok"})
 
 
-class ShipmentList(APIView):
-    def get(self, request):
-        serializer = ShipmentSerializer(Shipment.objects.all(), many=True)
-        return Response(serializer.data)
-
-
-class ShipmentReserve(APIView):
+class ReserveShipment(APIView):
     def post(self, request):
-        serializer = ShipmentSerializer(data=request.data)
-        if serializer.is_valid():
-            shipment = serializer.save(status="reserved")
-            return Response(ShipmentSerializer(shipment).data)
-        return Response(serializer.errors, status=400)
+        order_id = _to_int(request.data.get("order_id"), 0)
+        customer_id = _to_int(request.data.get("customer_id"), 0)
+        address = (request.data.get("address") or "").strip()
+        method = (request.data.get("method") or "standard").strip() or "standard"
+
+        if order_id <= 0 or customer_id < 0:
+            return Response({"error": "order_id and customer_id are required."}, status=status.HTTP_400_BAD_REQUEST)
+
+        shipment = Shipment.objects.create(
+            order_id=order_id,
+            customer_id=customer_id,
+            address=address,
+            method=method,
+            status=Shipment.STATUS_RESERVED,
+        )
+        serializer = ShipmentSerializer(shipment)
+        return Response(serializer.data, status=status.HTTP_201_CREATED)
 
 
-class ShipmentCancel(APIView):
+class CancelShipment(APIView):
     def post(self, request, shipment_id):
-        try:
-            shipment = Shipment.objects.get(id=shipment_id)
-        except Shipment.DoesNotExist:
-            return Response({"error": "Shipment not found"}, status=404)
+        shipment = Shipment.objects.filter(id=shipment_id).first()
+        if not shipment:
+            return Response({"error": "Shipment not found."}, status=status.HTTP_404_NOT_FOUND)
 
-        shipment.status = "cancelled"
-        shipment.save(update_fields=["status"])
-        return Response(ShipmentSerializer(shipment).data)
+        shipment.status = Shipment.STATUS_CANCELLED
+        shipment.save(update_fields=["status", "updated_at"])
+        serializer = ShipmentSerializer(shipment)
+        return Response(serializer.data)

@@ -1,0 +1,42 @@
+from django.urls import path
+
+from .views import (
+    add_to_cart,
+    auth_login,
+    auth_logout,
+    auth_register,
+    cart_view,
+    checkout_view,
+    create_order,
+    favorites_view,
+    health,
+    home,
+    orders_view,
+    product_detail,
+    recommendations_view,
+    remove_cart_item,
+    shop,
+    toggle_favorite,
+    update_cart_item,
+)
+
+urlpatterns = [
+    path("", home),
+    path("health/", health),
+    path("service-health/", health),
+    path("auth/login/", auth_login),
+    path("auth/register/", auth_register),
+    path("auth/logout/", auth_logout),
+    path("shop/", shop),
+    path("shop/<int:product_id>/", product_detail),
+    path("favorites/", favorites_view),
+    path("favorites/toggle/<int:product_id>/", toggle_favorite),
+    path("cart/", cart_view),
+    path("cart/add/<int:product_id>/", add_to_cart),
+    path("cart/update/<int:product_id>/", update_cart_item),
+    path("cart/remove/<int:product_id>/", remove_cart_item),
+    path("checkout/", checkout_view),
+    path("orders/create/", create_order),
+    path("orders/", orders_view),
+    path("recommendations/", recommendations_view),
+]
